@@ -1,0 +1,7301 @@
+openapi: 3.0.3
+info:
+  title: Metaculus API
+  version: '1.0'
+  description: |2
+
+    <b>Welcome to the official Metaculus API!</b>
+
+    If you have questions, ideas, or feedback, please contact our team at
+    api-requests@metaculus.com. We are excited to keep building upon this
+    initial version of the API, and we’d like to keep making it more useful
+    to you. Our aim is to support the forecasting community – we’re listening!
+
+    <b>Get Started in 15 Seconds</b>
+
+    <ol>
+    <li>Most of the API is (hopefully) self-explanatory. You’ll find all the documentation below.
+    <li>If you’re testing the waters or doing a one-off analysis, you can dive right in!
+    <li>If you’re building an application that connects to the Metaculus API, you’ll need to authenticate.
+    </ol>
+
+    <b>How to Authenticate</b>
+
+    To request an auth token, email api-requests@metaculus.com and let Dan, Jon,
+    and Martin know what you’d like to build. Please tell us a bit about yourself
+    or your organization and how you intend to use the API.
+
+    You can then add the token we generate for you to your requests using the
+    <i>Authorization</i> HTTP header. The token should be prefixed by the string
+     literal "Token", with whitespace separating the two strings.
+
+    Example:
+
+    <blockquote>
+    Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b
+    </blockquote>
+
+    <b>A Note for Early Adopters of the API from 2020-2023</b>
+
+    Please be aware that we‘re rapidly improving our forecasting tools and so cannot
+    guarantee continued backward compatibility for all features. If you previously
+    authenticated via cookies, we will continue to support this functionality for
+    now, but we ask that you please switch to using auth tokens as described above
+    by June 1, 2023.
+
+    We're eager to support wider usage of the API, and the more feedback we get from
+    the community, the more helpful we can be. (For certain endpoints, access levels
+    vary depending on user permissions.)
+
+    Please send us an email at api-requests@metaculus.com if you’d like to discuss your specific application.
+
+    <i>Updated as of: May 1, 2023</i>
+
+    <hr/>
+    <h3 id="tutorial"> A Very Quick Tutorial</h3>
+
+    Let's walk through the process of fetching a list of questions, getting the details of an
+    individual question, and making a prediction.
+
+    <b>Fetching a Question List and Question Details</b>
+
+    This is straightforward: we set the <i>Authorization</i> header as described above, and fetch the URL
+
+    <i>https://www.metaculus.com/api2/questions/</i>
+
+    Let's make it a little more interesting by only fetching questions which were asked during
+     and resolved before the end of, 2022. We can add the query parameters
+     <i>publish_time__gt</i> and <i>resolve_time__lt</i> accordingly
+     (note double underscores before <i>gt</i> and </i>let</i>):
+
+    <i>https://www.metaculus.com/api2/questions/?publish_time__gt=2021-12-31&resolve_time__lt=2023-01-01</i>
+
+    (We could make it more precise by saying e.g. <i>public_time__t=2021-12-31T23:59:59Z</i> but this is
+    sufficient for our purposes.) This gets us the question with ID 7871, <i>"Will there be a female Fields
+    Medalist in 2022?"</i>
+
+    In practice, the data from <i>/questions</i> includes almost all the data about
+    a question -- and even more, such as the description and its categories, if you also add the query
+    parameter <i>include_description=true</i>. But you could easily get the few additional details from
+
+    <i>https://www.metaculus.com/api2/questions/7871</i>
+
+    <b>Making a Prediction</b>
+
+    We can't <i>actually</i> post a new prediction for that question, since it has resolved. But if we
+    were to time-travel back to before its resolution, we would do so by simply HTTP POSTing to the URL
+
+    <i>https://www.metaculus.com/api2/questions/7871/predict</i>
+
+    the payload
+
+    {
+        "prediction": 0.9,
+    }
+
+    to predict a 90% chance of this happening. If we <i>did</i> have the permissions required to make
+    that prediction, we would get back a response with the prediction we just made. Note that this is
+    a binary (i.e. yes/no) question; for a <i>continuous</i> question, the payload gets a little more
+    complicated.
+
+    <b>Making A Continuous Prediction</b>
+
+    ...OK: a <i>lot</i> more complicated. For now, we'll just document the JSON schema that such
+    predictions require below, and will document its usage more thoroughly it in a separate subsequent
+    tutorial. In the interim, please contact us at
+    <a href="mailto:api-requests@metaculus.com">api-requests@metaculus.com</a>
+    if you wish to use the API to make continuous predictions.
+
+    <b>JSON Schema for Continuous Predictions</b>
+
+    <blockquote>
+    schema = {
+        "type": "object",
+        "properties": {
+            "kind": {
+                "enum": (["logistic", "gaussian"])
+            },
+            "avg": {
+                "type": "number",
+                "minimum": -2,
+                "maximum": 3,
+            },
+            "stdev": {
+                "type": "number",
+                "minimum": 0.005,
+                "maximum": 10,
+            },
+            "a": {
+                "type": "number",
+                "minimum": -0.96,
+                "maximum": +0.96,
+            },
+            "low": {
+                "type": "number",
+                "minimum": 0.0099,
+                "maximum": 1 - 0.0099,
+            },
+            "high": {
+                "type": "number",
+                "minimum": 0.0099,
+                "maximum": 1 - 0.0099,
+            },
+        },
+        "additionalProperties": boolean,
+        "required": ["avg", "stdev"]
+    }
+    </blockquote>
+    For questions with lower/upper bounds, "low"/"high" are required. For logistic
+    distributions, the schema requires "x0" and "s" rather than "avg" and "stdev."
+    Metaculus supports multiple superimposed distributions, in which case the above schema
+    will be nested in a "super-schema" containing each of those; contact us for details.
+    <hr/>
+paths:
+  /api2/about-numbers/:
+    get:
+      operationId: about_numbers_retrieve
+      tags:
+      - about-numbers
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api2/categories/:
+    get:
+      operationId: categories_list
+      parameters:
+      - in: path
+        name: bare_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: id
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 1
+        required: true
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: long_name
+        schema:
+          type: string
+          maxLength: 150
+          minLength: 1
+        required: true
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      - in: query
+        name: short_name
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 1
+        required: true
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      tags:
+      - categories
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCategoryList'
+          description: ''
+  /api2/categories/{bare_id}/:
+    get:
+      operationId: categories_retrieve
+      parameters:
+      - in: path
+        name: bare_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: id
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 1
+        required: true
+      - in: query
+        name: long_name
+        schema:
+          type: string
+          maxLength: 150
+          minLength: 1
+        required: true
+      - in: query
+        name: short_name
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 1
+        required: true
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      tags:
+      - categories
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+  /api2/comments/:
+    get:
+      operationId: comments_list
+      parameters:
+      - in: query
+        name: author
+        schema:
+          type: integer
+      - in: query
+        name: created_time__gt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_time__lt
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: order_by
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: question
+        schema:
+          type: integer
+      tags:
+      - comments
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCommentList'
+          description: ''
+    post:
+      operationId: comments_create
+      tags:
+      - comments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Comment'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+          description: ''
+  /api2/comments/{id}/:
+    get:
+      operationId: comments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - comments
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentChildren'
+          description: ''
+    put:
+      operationId: comments_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - comments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CommentUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CommentUpdate'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentUpdate'
+          description: ''
+    patch:
+      operationId: comments_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - comments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCommentUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCommentUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCommentUpdate'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentUpdate'
+          description: ''
+    delete:
+      operationId: comments_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - comments
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api2/comments/{id}/like/:
+    post:
+      operationId: comments_like_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - comments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Comment'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+          description: ''
+  /api2/comments/{id}/report/:
+    post:
+      operationId: comments_report_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this comment.
+        required: true
+      tags:
+      - comments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Comment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Comment'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+          description: ''
+  /api2/notifications/:
+    get:
+      operationId: notifications_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - notifications
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationList'
+          description: ''
+  /api2/notifications/mark_read/:
+    post:
+      operationId: notifications_mark_read_create
+      tags:
+      - notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Notification'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Notification'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Notification'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api2/organizations/:
+    get:
+      operationId: organizations_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - organizations
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationList'
+          description: ''
+  /api2/organizations/{id}/:
+    get:
+      operationId: organizations_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - organizations
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationDetail'
+          description: ''
+  /api2/organizations/{id}/members/:
+    post:
+      operationId: organizations_members_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Organization'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+  /api2/organizations/{id}/members/{user_id}/:
+    post:
+      operationId: organizations_members_create_2
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Organization'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    put:
+      operationId: organizations_members_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Organization'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    patch:
+      operationId: organizations_members_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    delete:
+      operationId: organizations_members_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - organizations
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api2/predictions/:
+    get:
+      operationId: predictions_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      - name: order_by
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      tags:
+      - predictions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPredictionUsernameList'
+          description: ''
+  /api2/predictions/{id}/:
+    get:
+      operationId: predictions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - predictions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionUsername'
+          description: ''
+  /api2/projects/:
+    get:
+      operationId: projects_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - projects
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjectList'
+          description: ''
+    post:
+      operationId: projects_create
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectUpdate'
+          description: ''
+  /api2/projects/{id}/:
+    get:
+      operationId: projects_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetail'
+          description: ''
+    put:
+      operationId: projects_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectUpdate'
+          description: ''
+    patch:
+      operationId: projects_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/follow/:
+    post:
+      operationId: projects_follow_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/invite-members/:
+    post:
+      operationId: projects_invite_members_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/is-following/:
+    get:
+      operationId: projects_is_following_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/join/:
+    post:
+      operationId: projects_join_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/leave/:
+    post:
+      operationId: projects_leave_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/members/{user_id}/:
+    post:
+      operationId: projects_members_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    put:
+      operationId: projects_members_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    patch:
+      operationId: projects_members_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    delete:
+      operationId: projects_members_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - projects
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api2/projects/{id}/personal-stats/:
+    get:
+      operationId: projects_personal_stats_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/register/:
+    post:
+      operationId: projects_register_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/registered/:
+    get:
+      operationId: projects_registered_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projects/{id}/unfollow/:
+    post:
+      operationId: projects_unfollow_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api2/projectstats/:
+    get:
+      operationId: projectstats_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      - name: order_by
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: project
+        schema:
+          type: integer
+      tags:
+      - projectstats
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjectUserStatsList'
+          description: ''
+  /api2/projectstats/{id}/:
+    get:
+      operationId: projectstats_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project user stats.
+        required: true
+      tags:
+      - projectstats
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectUserStats'
+          description: ''
+  /api2/question-summaries/{id}/:
+    get:
+      operationId: question_summaries_retrieve
+      description: Get the question summary for a given question.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - question-summaries
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionSummary'
+          description: ''
+  /api2/question-summaries/feedback/:
+    post:
+      operationId: question_summaries_feedback_create
+      tags:
+      - question-summaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionSummaryFeedback'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestionSummaryFeedback'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestionSummaryFeedback'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionSummaryFeedback'
+          description: ''
+  /api2/questions/:
+    get:
+      operationId: questions_list
+      parameters:
+      - in: query
+        name: access
+        schema:
+          type: string
+      - in: query
+        name: author
+        schema:
+          type: integer
+      - in: query
+        name: categories
+        schema:
+          type: string
+      - in: query
+        name: close_time__gt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: close_time__lt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: commented_by
+        schema:
+          type: number
+      - in: query
+        name: contest
+        schema:
+          type: string
+      - in: query
+        name: forecast_type
+        schema:
+          type: string
+      - in: query
+        name: group
+        schema:
+          type: integer
+      - in: query
+        name: guessed_by
+        schema:
+          type: number
+      - in: query
+        name: has_group
+        schema:
+          type: boolean
+      - in: query
+        name: include_description
+        schema:
+          type: string
+        description: Set to 'true' to include the description (and categories) in
+          responses
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: not_guessed_by
+        schema:
+          type: number
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      - name: order_by
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: project
+        schema:
+          type: string
+      - in: query
+        name: publish_time__gt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: publish_time__lt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: resolve_time__gt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: resolve_time__lt
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: reversed_related
+        schema:
+          type: number
+      - in: query
+        name: search
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: type
+        schema:
+          type: string
+      - in: query
+        name: unconditional
+        schema:
+          type: boolean
+      - in: query
+        name: upvoted_by
+        schema:
+          type: number
+      - in: query
+        name: username
+        schema:
+          type: string
+      - in: query
+        name: visible_from_project
+        schema:
+          type: string
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedQuestionList'
+          description: ''
+    post:
+      operationId: questions_create
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdate'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionUpdate'
+          description: ''
+  /api2/questions/{id}/:
+    get:
+      operationId: questions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionDetail'
+          description: ''
+    put:
+      operationId: questions_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestionUpdate'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionUpdate'
+          description: ''
+    patch:
+      operationId: questions_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedQuestionUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedQuestionUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedQuestionUpdate'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionUpdate'
+          description: ''
+    delete:
+      operationId: questions_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api2/questions/{id}/add_consideration_vote/:
+    post:
+      operationId: questions_add_consideration_vote_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api2/questions/{id}/boost/:
+    post:
+      operationId: questions_boost_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Boost'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Boost'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Boost'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Boost'
+          description: ''
+  /api2/questions/{id}/predict/:
+    post:
+      operationId: questions_predict_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictionInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PredictionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PredictionInput'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionInput'
+          description: ''
+  /api2/questions/{id}/prediction-for-date/:
+    get:
+      operationId: questions_prediction_for_date_retrieve
+      description: This endpoint is used only for Tezos verification
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionForDate'
+          description: ''
+  /api2/questions/{id}/prediction-history/:
+    get:
+      operationId: questions_prediction_history_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api2/questions/{id}/predictions/:
+    get:
+      operationId: questions_predictions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api2/questions/{id}/question-sharing/{username}/:
+    post:
+      operationId: questions_question_sharing_create
+      description: |-
+        This endpoint is used for sharing Private and Draft questions with other users.
+        If sharing private question - invited user will receive "predictor" permissions.
+        If sharing draft question - invited user will receive "coauthor" permissions"
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      - in: path
+        name: username
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareQuestion'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ShareQuestion'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ShareQuestion'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareQuestion'
+          description: ''
+    delete:
+      operationId: questions_question_sharing_destroy
+      description: |-
+        This endpoint is used for sharing Private and Draft questions with other users.
+        If sharing private question - invited user will receive "predictor" permissions.
+        If sharing draft question - invited user will receive "coauthor" permissions"
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      - in: path
+        name: username
+        schema:
+          type: string
+          pattern: ^.+$
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api2/questions/{id}/remove_consideration_vote/:
+    post:
+      operationId: questions_remove_consideration_vote_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api2/questions/{id}/resolve/:
+    post:
+      operationId: questions_resolve_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionResolve'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestionResolve'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestionResolve'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionResolve'
+          description: ''
+  /api2/questions/{id}/show-community/:
+    post:
+      operationId: questions_show_community_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShowCommunity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ShowCommunity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ShowCommunity'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShowCommunity'
+          description: ''
+  /api2/questions/{id}/view-metaculus-prediction/:
+    post:
+      operationId: questions_view_metaculus_prediction_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Question'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Question'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Question'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Question'
+          description: ''
+  /api2/questions/{id}/vote/:
+    post:
+      operationId: questions_vote_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this question.
+        required: true
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionVote'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QuestionVote'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/QuestionVote'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionVote'
+          description: ''
+  /api2/questions/bulk-predict/:
+    post:
+      operationId: questions_bulk_predict_create
+      tags:
+      - questions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkPredictionInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BulkPredictionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BulkPredictionInput'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkPredictionInput'
+          description: ''
+  /api2/rankings/:
+    get:
+      operationId: rankings_list
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - rankings
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRankingList'
+          description: ''
+  /api2/rankings/{id}/:
+    get:
+      operationId: rankings_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this site-specific user data.
+        required: true
+      tags:
+      - rankings
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ranking'
+          description: ''
+  /api2/reminders/:
+    get:
+      operationId: reminders_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: question
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - REMINDER_STATUS_ACTIVE
+          - REMINDER_STATUS_DEACTIVATED
+          - REMINDER_STATUS_SENT
+      tags:
+      - reminders
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReminderList'
+          description: ''
+    post:
+      operationId: reminders_create
+      tags:
+      - reminders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+  /api2/reminders/{id}/:
+    get:
+      operationId: reminders_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reminder.
+        required: true
+      tags:
+      - reminders
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+    put:
+      operationId: reminders_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reminder.
+        required: true
+      tags:
+      - reminders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reminder'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+    patch:
+      operationId: reminders_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reminder.
+        required: true
+      tags:
+      - reminders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedReminder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedReminder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedReminder'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+  /api2/user-profiles/:
+    get:
+      operationId: user_profiles_list
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - user-profiles
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserProfileList'
+          description: ''
+  /api2/user-profiles/{id}/:
+    get:
+      operationId: user_profiles_retrieve
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - user-profiles
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    put:
+      operationId: user_profiles_update
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - user-profiles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfile'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserProfile'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserProfile'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+    patch:
+      operationId: user_profiles_partial_update
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - user-profiles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfile'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfile'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfile'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+  /api2/users/:
+    get:
+      operationId: users_list
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+  /api2/users/{id}/:
+    get:
+      operationId: users_retrieve
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    put:
+      operationId: users_update
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api2/users/{id}/collect-tachyons/:
+    post:
+      operationId: users_collect_tachyons_create
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api2/users/{id}/purchase-track-record/:
+    post:
+      operationId: users_purchase_track_record_create
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api2/users/{id}/unlock-power/:
+    post:
+      operationId: users_unlock_power_create
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api2/users/global-cp-reminder/:
+    get:
+      operationId: users_global_cp_reminder_retrieve
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    post:
+      operationId: users_global_cp_reminder_create
+      parameters:
+      - in: query
+        name: ask_when_reaffirm_question_modal
+        schema:
+          type: boolean
+      - in: query
+        name: date_joined
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: default_community_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          - 2
+          type: integer
+      - in: query
+        name: default_mp_visibility
+        schema:
+          enum:
+          - 0
+          - 1
+          type: integer
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - in: query
+        name: first_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: formerly_known_as
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: is_staff
+        schema:
+          type: boolean
+      - in: query
+        name: is_superuser
+        schema:
+          type: boolean
+      - in: query
+        name: last_name
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: last_visited
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: level
+        schema:
+          type: integer
+      - in: query
+        name: levelTitle
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: permissions
+        schema:
+          type: object
+          additionalProperties:
+            type: boolean
+      - in: query
+        name: points_until_level
+        schema:
+          type: integer
+      - in: query
+        name: powers
+        schema:
+          type: object
+          additionalProperties: {}
+      - in: query
+        name: purchasable_track_record
+        schema:
+          type: boolean
+      - in: query
+        name: score
+        schema:
+          type: integer
+      - in: query
+        name: show_profile_comments
+        schema:
+          type: boolean
+      - in: query
+        name: supporter_level
+        schema:
+          type: integer
+      - in: query
+        name: supporter_since
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: tachyons
+        schema:
+          type: integer
+      - in: query
+        name: url
+        schema:
+          type: string
+          format: uri
+      - in: query
+        name: username
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: username_change_cost
+        schema:
+          type: integer
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /stats/user_feedback/:
+    post:
+      operationId: stats_user_feedback_create
+      tags:
+      - stats
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserFeedback'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserFeedback'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserFeedback'
+        required: true
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - tokenAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserFeedback'
+          description: ''
+components:
+  schemas:
+    Boost:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    BulkPredictionInput:
+      type: object
+      properties:
+        prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        question_id:
+          type: integer
+      required:
+      - prediction
+      - question_id
+    Category:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: string
+          maxLength: 100
+        short_name:
+          type: string
+          maxLength: 100
+        long_name:
+          type: string
+          maxLength: 150
+      required:
+      - id
+      - long_name
+      - short_name
+      - url
+    Comment:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+          nullable: true
+        author_name:
+          type: string
+          nullable: true
+          readOnly: true
+        author_lvl:
+          readOnly: true
+        author_supporter_lvl:
+          type: integer
+          readOnly: true
+        is_moderator:
+          type: boolean
+          readOnly: true
+        is_admin:
+          type: boolean
+          readOnly: true
+        question:
+          type: string
+        comment_html:
+          type: string
+          readOnly: true
+        comment_text:
+          type: string
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        prediction_value:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        submit_type:
+          $ref: '#/components/schemas/SubmitTypeEnum'
+        preview:
+          type: boolean
+          writeOnly: true
+        parent:
+          type: integer
+          nullable: true
+        num_children:
+          type: integer
+          readOnly: true
+          default: 0
+        num_likes:
+          type: integer
+          nullable: true
+          readOnly: true
+        deleted:
+          type: boolean
+          readOnly: true
+        parent_author:
+          type: string
+          nullable: true
+          readOnly: true
+        user_like:
+          type: integer
+          readOnly: true
+          default: 0
+        user_like_at:
+          type: string
+          readOnly: true
+        latest_prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        include_latest_prediction:
+          type: boolean
+          writeOnly: true
+        edits:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+      required:
+      - author
+      - author_lvl
+      - author_name
+      - author_supporter_lvl
+      - comment_html
+      - comment_text
+      - created_time
+      - deleted
+      - edits
+      - id
+      - is_admin
+      - is_moderator
+      - num_children
+      - num_likes
+      - parent_author
+      - prediction_value
+      - question
+      - url
+      - user_like
+      - user_like_at
+    CommentChildren:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+          nullable: true
+        author_name:
+          type: string
+          nullable: true
+          readOnly: true
+        author_lvl:
+          readOnly: true
+        author_supporter_lvl:
+          type: integer
+          readOnly: true
+        is_moderator:
+          type: boolean
+          readOnly: true
+        is_admin:
+          type: boolean
+          readOnly: true
+        question:
+          type: string
+        comment_html:
+          type: string
+          readOnly: true
+        comment_text:
+          type: string
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        prediction_value:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        submit_type:
+          $ref: '#/components/schemas/SubmitTypeEnum'
+        preview:
+          type: boolean
+          writeOnly: true
+        parent:
+          type: integer
+          nullable: true
+        num_children:
+          type: integer
+          readOnly: true
+          default: 0
+        num_likes:
+          type: integer
+          nullable: true
+          readOnly: true
+        deleted:
+          type: boolean
+          readOnly: true
+        parent_author:
+          type: string
+          nullable: true
+          readOnly: true
+        user_like:
+          type: integer
+          readOnly: true
+          default: 0
+        user_like_at:
+          type: string
+          readOnly: true
+        latest_prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        include_latest_prediction:
+          type: boolean
+          writeOnly: true
+        edits:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        children:
+          allOf:
+          - $ref: '#/components/schemas/Comment'
+          readOnly: true
+      required:
+      - author
+      - author_lvl
+      - author_name
+      - author_supporter_lvl
+      - children
+      - comment_html
+      - comment_text
+      - created_time
+      - deleted
+      - edits
+      - id
+      - is_admin
+      - is_moderator
+      - num_children
+      - num_likes
+      - parent_author
+      - prediction_value
+      - question
+      - url
+      - user_like
+      - user_like_at
+    CommentUpdate:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+          nullable: true
+        author_name:
+          type: string
+          nullable: true
+          readOnly: true
+        author_lvl:
+          readOnly: true
+        author_supporter_lvl:
+          type: integer
+          readOnly: true
+        is_moderator:
+          type: boolean
+          readOnly: true
+        is_admin:
+          type: boolean
+          readOnly: true
+        question:
+          type: string
+        comment_html:
+          type: string
+          readOnly: true
+        comment_text:
+          type: string
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        prediction_value:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        submit_type:
+          $ref: '#/components/schemas/SubmitTypeEnum'
+        preview:
+          type: boolean
+          writeOnly: true
+        parent:
+          type: integer
+          nullable: true
+        num_children:
+          type: integer
+          readOnly: true
+          default: 0
+        num_likes:
+          type: integer
+          nullable: true
+          readOnly: true
+        deleted:
+          type: boolean
+        parent_author:
+          type: string
+          nullable: true
+          readOnly: true
+        user_like:
+          type: integer
+          readOnly: true
+          default: 0
+        user_like_at:
+          type: string
+          readOnly: true
+        latest_prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        include_latest_prediction:
+          type: boolean
+          writeOnly: true
+        edits:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+      required:
+      - author
+      - author_lvl
+      - author_name
+      - author_supporter_lvl
+      - comment_html
+      - comment_text
+      - created_time
+      - edits
+      - id
+      - is_admin
+      - is_moderator
+      - num_children
+      - num_likes
+      - parent_author
+      - prediction_value
+      - question
+      - url
+      - user_like
+      - user_like_at
+    Considerations:
+      type: object
+      description: |-
+        Just contains basic data used by all other serializers.
+        Does not include all of the derived data.
+      properties:
+        active_state:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          nullable: true
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          default: ''
+          maxLength: 45
+        group_label:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status3baEnum'
+          writeOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        type:
+          $ref: '#/components/schemas/QuestionTypes'
+        user_perms:
+          readOnly: true
+        weekly_movement:
+          type: number
+          format: double
+          nullable: true
+        weekly_movement_direction:
+          type: integer
+          nullable: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+        edited_time:
+          type: string
+          format: date-time
+          readOnly: true
+        metaculus_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        community_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        consideration_voters:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        user_voted_on_consideration:
+          type: boolean
+          readOnly: true
+      required:
+      - active_state
+      - author
+      - author_name
+      - community_prediction
+      - consideration_voters
+      - created_time
+      - edited_time
+      - effected_close_time
+      - id
+      - metaculus_prediction
+      - page_url
+      - resolution
+      - url
+      - user_perms
+      - user_voted_on_consideration
+    Notification:
+      type: object
+      properties:
+        user:
+          type: integer
+        created_time:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+        type:
+          $ref: '#/components/schemas/NotificationTypeEnum'
+        data:
+          type: object
+          additionalProperties: {}
+      required:
+      - type
+      - user
+    NotificationTypeEnum:
+      enum:
+      - Q
+      - M
+      - S
+      type: string
+    Option:
+      type: object
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+          maxLength: 64
+      required:
+      - label
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        subtitle:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        user_project_perms:
+          type: integer
+          readOnly: true
+        absolute_url:
+          type: string
+          readOnly: true
+      required:
+      - absolute_url
+      - description
+      - id
+      - name
+      - subtitle
+      - type
+      - user_project_perms
+    OrganizationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        subtitle:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        user_project_perms:
+          type: integer
+          readOnly: true
+        absolute_url:
+          type: string
+          readOnly: true
+        user_permissions:
+          readOnly: true
+      required:
+      - absolute_url
+      - description
+      - id
+      - name
+      - subtitle
+      - type
+      - user_permissions
+      - user_project_perms
+    PaginatedCategoryList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+    PaginatedCommentList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+    PaginatedNotificationList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+    PaginatedOrganizationList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+    PaginatedPredictionUsernameList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PredictionUsername'
+    PaginatedProjectList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+    PaginatedProjectUserStatsList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectUserStats'
+    PaginatedQuestionList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+    PaginatedRankingList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ranking'
+    PaginatedReminderList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reminder'
+    PaginatedUserList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PaginatedUserProfileList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProfile'
+    PatchedCommentUpdate:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+          nullable: true
+        author_name:
+          type: string
+          nullable: true
+          readOnly: true
+        author_lvl:
+          readOnly: true
+        author_supporter_lvl:
+          type: integer
+          readOnly: true
+        is_moderator:
+          type: boolean
+          readOnly: true
+        is_admin:
+          type: boolean
+          readOnly: true
+        question:
+          type: string
+        comment_html:
+          type: string
+          readOnly: true
+        comment_text:
+          type: string
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        prediction_value:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        submit_type:
+          $ref: '#/components/schemas/SubmitTypeEnum'
+        preview:
+          type: boolean
+          writeOnly: true
+        parent:
+          type: integer
+          nullable: true
+        num_children:
+          type: integer
+          readOnly: true
+          default: 0
+        num_likes:
+          type: integer
+          nullable: true
+          readOnly: true
+        deleted:
+          type: boolean
+        parent_author:
+          type: string
+          nullable: true
+          readOnly: true
+        user_like:
+          type: integer
+          readOnly: true
+          default: 0
+        user_like_at:
+          type: string
+          readOnly: true
+        latest_prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        include_latest_prediction:
+          type: boolean
+          writeOnly: true
+        edits:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+    PatchedOrganization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        subtitle:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        user_project_perms:
+          type: integer
+          readOnly: true
+        absolute_url:
+          type: string
+          readOnly: true
+    PatchedProject:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        url:
+          type: string
+          readOnly: true
+        type_str:
+          type: string
+          readOnly: true
+        score_type:
+          allOf:
+          - $ref: '#/components/schemas/ScoreTypeEnum'
+          readOnly: true
+        subtitle:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          readOnly: true
+        site_id:
+          type: integer
+          readOnly: true
+        user_perms:
+          readOnly: true
+        question_user_perms:
+          readOnly: true
+        sign_up_fields:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        tournament_close_date:
+          type: string
+          format: date-time
+          readOnly: true
+        tournament_start_date:
+          type: string
+          format: date-time
+          readOnly: true
+        prize_pool:
+          type: number
+          format: double
+          readOnly: true
+        config:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        in_main_feed_by_default:
+          type: boolean
+          readOnly: true
+        public:
+          type: boolean
+          readOnly: true
+        is_opt_in:
+          type: boolean
+          readOnly: true
+    PatchedQuestionUpdate:
+      type: object
+      description: |-
+        Just contains basic data used by all other serializers.
+        Does not include all of the derived data.
+      properties:
+        active_state:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          default: ''
+          maxLength: 45
+        group_label:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/QuestionUpdateStatusEnum'
+          writeOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        type:
+          $ref: '#/components/schemas/QuestionTypes'
+        user_perms:
+          readOnly: true
+        weekly_movement:
+          type: number
+          format: double
+          nullable: true
+        weekly_movement_direction:
+          type: integer
+          nullable: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+        edited_time:
+          type: string
+          format: date-time
+          readOnly: true
+        categories:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        description_html:
+          type: string
+        resolution_criteria:
+          type: string
+        resolution_criteria_html:
+          type: string
+        fine_print:
+          type: string
+        fine_print_html:
+          type: string
+        prediction_count:
+          type: integer
+          readOnly: true
+        parent_question_id:
+          type: integer
+          writeOnly: true
+        related_questions:
+          type: array
+          items: {}
+          writeOnly: true
+        sub_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubQuestionUpdate'
+        projects:
+          readOnly: true
+        edit_form_data:
+          type: object
+          additionalProperties: {}
+        projects_input:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionProject'
+          writeOnly: true
+        conditioned_on:
+          type: integer
+          minimum: 1
+        unconditional_question:
+          type: integer
+          minimum: 1
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/Option'
+    PatchedReminder:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        reminder:
+          $ref: '#/components/schemas/ReminderEnum'
+        question:
+          type: integer
+        user:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ReminderStatusEnum'
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        note:
+          type: string
+        question_title:
+          type: string
+          nullable: true
+          readOnly: true
+        status_label:
+          type: string
+          readOnly: true
+        reminder_label:
+          type: string
+          readOnly: true
+        remind_on_date:
+          type: string
+          format: date-time
+          nullable: true
+        remind_on_new_comments:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        remind_base_prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        remind_on_percent_lifetime:
+          type: integer
+          maximum: 100
+          minimum: 0
+          nullable: true
+        next_trigger_date:
+          type: string
+          format: date-time
+          nullable: true
+        next_trigger_value:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        repeat_pattern:
+          $ref: '#/components/schemas/RepeatPatternEnum'
+    PatchedUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        level:
+          type: integer
+          readOnly: true
+        levelTitle:
+          type: string
+          readOnly: true
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+        supporter_level:
+          type: integer
+          readOnly: true
+        supporter_since:
+          type: string
+          format: date-time
+          readOnly: true
+        formerly_known_as:
+          type: string
+          readOnly: true
+    PatchedUserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        bio_html:
+          type: string
+          readOnly: true
+        bio_text:
+          type: string
+        website:
+          type: string
+          format: uri
+          maxLength: 100
+    PredictionForDate:
+      type: object
+      properties:
+        cp:
+          type: string
+        mp:
+          type: string
+      required:
+      - cp
+      - mp
+    PredictionInput:
+      type: object
+      properties:
+        prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+      required:
+      - prediction
+    PredictionUsername:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        predictions:
+          type: object
+          additionalProperties: {}
+        points_won:
+          type: number
+          format: double
+          nullable: true
+        user:
+          type: integer
+          nullable: true
+        question:
+          type: integer
+        username:
+          type: string
+      required:
+      - id
+      - question
+      - user
+      - username
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        url:
+          type: string
+          readOnly: true
+        type_str:
+          type: string
+          readOnly: true
+        score_type:
+          allOf:
+          - $ref: '#/components/schemas/ScoreTypeEnum'
+          readOnly: true
+        subtitle:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          readOnly: true
+        site_id:
+          type: integer
+          readOnly: true
+        user_perms:
+          readOnly: true
+        question_user_perms:
+          readOnly: true
+        sign_up_fields:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        tournament_close_date:
+          type: string
+          format: date-time
+          readOnly: true
+        tournament_start_date:
+          type: string
+          format: date-time
+          readOnly: true
+        prize_pool:
+          type: number
+          format: double
+          readOnly: true
+        config:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        in_main_feed_by_default:
+          type: boolean
+          readOnly: true
+        public:
+          type: boolean
+          readOnly: true
+        is_opt_in:
+          type: boolean
+          readOnly: true
+      required:
+      - config
+      - description
+      - id
+      - in_main_feed_by_default
+      - is_opt_in
+      - name
+      - prize_pool
+      - public
+      - question_user_perms
+      - score_type
+      - sign_up_fields
+      - site_id
+      - subtitle
+      - tournament_close_date
+      - tournament_start_date
+      - type
+      - type_str
+      - url
+      - user_perms
+    ProjectDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        url:
+          type: string
+          readOnly: true
+        type_str:
+          type: string
+          readOnly: true
+        score_type:
+          allOf:
+          - $ref: '#/components/schemas/ScoreTypeEnum'
+          readOnly: true
+        subtitle:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        type:
+          type: string
+          readOnly: true
+        site_id:
+          type: integer
+          readOnly: true
+        user_perms:
+          readOnly: true
+        question_user_perms:
+          readOnly: true
+        sign_up_fields:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        tournament_close_date:
+          type: string
+          format: date-time
+          readOnly: true
+        tournament_start_date:
+          type: string
+          format: date-time
+          readOnly: true
+        prize_pool:
+          type: number
+          format: double
+          readOnly: true
+        config:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        in_main_feed_by_default:
+          type: boolean
+          readOnly: true
+        public:
+          type: boolean
+        is_opt_in:
+          type: boolean
+          readOnly: true
+        user_permissions:
+          readOnly: true
+        essay_count:
+          type: integer
+          readOnly: true
+        completion_question_count:
+          type: integer
+          readOnly: true
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+        header_logo:
+          type: string
+          format: uri
+        header_image:
+          type: string
+          format: uri
+        default_project_permissions:
+          readOnly: true
+        default_question_permissions:
+          readOnly: true
+        default_role:
+          readOnly: true
+      required:
+      - completion_question_count
+      - config
+      - default_project_permissions
+      - default_question_permissions
+      - default_role
+      - description
+      - essay_count
+      - header_image
+      - header_logo
+      - id
+      - in_main_feed_by_default
+      - is_opt_in
+      - name
+      - organizations
+      - prize_pool
+      - public
+      - question_user_perms
+      - score_type
+      - sign_up_fields
+      - site_id
+      - subtitle
+      - tournament_close_date
+      - tournament_start_date
+      - type
+      - type_str
+      - url
+      - user_permissions
+      - user_perms
+    ProjectOrganization:
+      type: object
+      properties:
+        id:
+          type: integer
+        selected:
+          type: boolean
+      required:
+      - id
+      - selected
+    ProjectUpdate:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        url:
+          type: string
+          readOnly: true
+        type_str:
+          type: string
+          readOnly: true
+        score_type:
+          allOf:
+          - $ref: '#/components/schemas/ScoreTypeEnum'
+          readOnly: true
+        subtitle:
+          type: string
+          readOnly: true
+        description:
+          type: string
+        type:
+          type: string
+        site_id:
+          type: integer
+          readOnly: true
+        user_perms:
+          readOnly: true
+        question_user_perms:
+          readOnly: true
+        sign_up_fields:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        tournament_close_date:
+          type: string
+          format: date-time
+        tournament_start_date:
+          type: string
+          format: date-time
+        prize_pool:
+          type: number
+          format: double
+          readOnly: true
+        config:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        in_main_feed_by_default:
+          type: boolean
+        public:
+          type: boolean
+        is_opt_in:
+          type: boolean
+          readOnly: true
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectOrganization'
+          writeOnly: true
+      required:
+      - config
+      - id
+      - is_opt_in
+      - name
+      - prize_pool
+      - question_user_perms
+      - score_type
+      - sign_up_fields
+      - site_id
+      - subtitle
+      - type_str
+      - url
+      - user_perms
+    ProjectUserStats:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        project:
+          type: integer
+        points:
+          type: integer
+        rank:
+          type: integer
+        log_score:
+          type: number
+          format: double
+        num_questions:
+          type: integer
+        num_questions_predicted:
+          type: integer
+        prize:
+          type: number
+          format: double
+        coverage_avg:
+          type: number
+          format: double
+        level:
+          type: integer
+          readOnly: true
+        level_title:
+          type: string
+          readOnly: true
+      required:
+      - coverage_avg
+      - id
+      - level
+      - level_title
+      - log_score
+      - num_questions
+      - num_questions_predicted
+      - points
+      - prize
+      - project
+      - rank
+      - username
+    Question:
+      type: object
+      description: |-
+        Just contains basic data used by all other serializers.
+        Does not include all of the derived data.
+      properties:
+        active_state:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          readOnly: true
+        group_label:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status3baEnum'
+          writeOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        type:
+          $ref: '#/components/schemas/QuestionTypes'
+        user_perms:
+          readOnly: true
+        weekly_movement:
+          type: number
+          format: double
+          nullable: true
+        weekly_movement_direction:
+          type: integer
+          nullable: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+        edited_time:
+          type: string
+          format: date-time
+          readOnly: true
+        last_activity_time:
+          type: string
+          format: date-time
+          readOnly: true
+        activity:
+          type: number
+          format: double
+          readOnly: true
+        comment_count:
+          type: integer
+          readOnly: true
+        votes:
+          type: integer
+          readOnly: true
+        metaculus_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        community_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        number_of_forecasters:
+          type: integer
+          readOnly: true
+          nullable: true
+        prediction_count:
+          type: integer
+        related_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionRelated'
+          readOnly: true
+          nullable: true
+        group:
+          type: integer
+          readOnly: true
+          nullable: true
+        condition:
+          readOnly: true
+        sub_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubQuestionList'
+          readOnly: true
+        has_fan_graph:
+          type: boolean
+          readOnly: true
+        projects:
+          readOnly: true
+        community_absolute_log_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        metaculus_absolute_log_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        metaculus_relative_log_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+      required:
+      - active_state
+      - activity
+      - author
+      - author_name
+      - comment_count
+      - community_absolute_log_score
+      - community_prediction
+      - condition
+      - created_time
+      - edited_time
+      - effected_close_time
+      - group
+      - has_fan_graph
+      - id
+      - last_activity_time
+      - metaculus_absolute_log_score
+      - metaculus_prediction
+      - metaculus_relative_log_score
+      - number_of_forecasters
+      - page_url
+      - prediction_count
+      - projects
+      - related_questions
+      - resolution
+      - sub_questions
+      - title_short
+      - url
+      - user_perms
+      - votes
+    QuestionDetail:
+      type: object
+      description: |-
+        Just contains basic data used by all other serializers.
+        Does not include all of the derived data.
+      properties:
+        active_state:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          readOnly: true
+        group_label:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status3baEnum'
+          writeOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        type:
+          $ref: '#/components/schemas/QuestionTypes'
+        user_perms:
+          readOnly: true
+        weekly_movement:
+          type: number
+          format: double
+          nullable: true
+        weekly_movement_direction:
+          type: integer
+          nullable: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+        edited_time:
+          type: string
+          format: date-time
+          readOnly: true
+        last_activity_time:
+          type: string
+          format: date-time
+          readOnly: true
+        activity:
+          type: number
+          format: double
+          readOnly: true
+        comment_count:
+          type: integer
+          readOnly: true
+        votes:
+          type: integer
+          readOnly: true
+        metaculus_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        community_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+        number_of_forecasters:
+          type: integer
+          readOnly: true
+          nullable: true
+        prediction_count:
+          type: integer
+        related_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionRelated'
+          readOnly: true
+          nullable: true
+        group:
+          type: integer
+          readOnly: true
+          nullable: true
+        condition:
+          readOnly: true
+        sub_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubQuestionDetail'
+        has_fan_graph:
+          type: boolean
+          readOnly: true
+        projects:
+          readOnly: true
+        community_absolute_log_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        metaculus_absolute_log_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        metaculus_relative_log_score:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        anon_prediction_count:
+          type: integer
+          readOnly: true
+        description:
+          type: string
+        description_html:
+          type: string
+        resolution_criteria:
+          type: string
+        resolution_criteria_html:
+          type: string
+        fine_print:
+          type: string
+        fine_print_html:
+          type: string
+        user_predictions:
+          readOnly: true
+        categories:
+          type: array
+          items:
+            type: string
+        closing_bonus:
+          type: number
+          format: double
+          readOnly: true
+        cp_hidden_weight_coverage:
+          readOnly: true
+        considerations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Considerations'
+          readOnly: true
+      required:
+      - active_state
+      - activity
+      - anon_prediction_count
+      - author
+      - author_name
+      - categories
+      - closing_bonus
+      - comment_count
+      - community_absolute_log_score
+      - community_prediction
+      - condition
+      - considerations
+      - cp_hidden_weight_coverage
+      - created_time
+      - edited_time
+      - effected_close_time
+      - group
+      - has_fan_graph
+      - id
+      - last_activity_time
+      - metaculus_absolute_log_score
+      - metaculus_prediction
+      - metaculus_relative_log_score
+      - number_of_forecasters
+      - page_url
+      - prediction_count
+      - projects
+      - related_questions
+      - resolution
+      - sub_questions
+      - title_short
+      - url
+      - user_perms
+      - user_predictions
+      - votes
+    QuestionProject:
+      type: object
+      properties:
+        id:
+          type: integer
+        selected:
+          type: boolean
+      required:
+      - id
+      - selected
+    QuestionRelated:
+      type: object
+      description: |-
+        Just contains basic data used by all other serializers.
+        Does not include all of the derived data.
+      properties:
+        active_state:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          nullable: true
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          default: ''
+          maxLength: 45
+        group_label:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status3baEnum'
+          writeOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        type:
+          $ref: '#/components/schemas/QuestionTypes'
+        user_perms:
+          readOnly: true
+        weekly_movement:
+          type: number
+          format: double
+          nullable: true
+        weekly_movement_direction:
+          type: integer
+          nullable: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+        edited_time:
+          type: string
+          format: date-time
+          readOnly: true
+        community_prediction:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+      required:
+      - active_state
+      - author
+      - author_name
+      - community_prediction
+      - created_time
+      - edited_time
+      - effected_close_time
+      - id
+      - page_url
+      - resolution
+      - url
+      - user_perms
+    QuestionResolve:
+      type: object
+      properties:
+        resolution:
+          type: number
+          format: double
+          nullable: true
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        notifyPredictors:
+          type: boolean
+      required:
+      - date
+      - notifyPredictors
+      - resolution
+    QuestionSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        question_id:
+          type: integer
+        content:
+          type: object
+          additionalProperties: {}
+        timestamp:
+          type: string
+          format: date-time
+      required:
+      - content
+      - id
+      - question_id
+      - timestamp
+    QuestionSummaryFeedback:
+      type: object
+      properties:
+        question_id:
+          type: integer
+        summary_id:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        summary_timestamp:
+          type: string
+          format: date-time
+        comment:
+          type: string
+      required:
+      - comment
+      - question_id
+      - summary_id
+      - summary_timestamp
+    QuestionTypes:
+      enum:
+      - forecast
+      - notebook
+      - discussion
+      - claim
+      - group
+      - conditional_group
+      - multiple_choice
+      type: string
+    QuestionUpdate:
+      type: object
+      description: |-
+        Just contains basic data used by all other serializers.
+        Does not include all of the derived data.
+      properties:
+        active_state:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        page_url:
+          type: string
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          default: ''
+          maxLength: 45
+        group_label:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/QuestionUpdateStatusEnum'
+          writeOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        type:
+          $ref: '#/components/schemas/QuestionTypes'
+        user_perms:
+          readOnly: true
+        weekly_movement:
+          type: number
+          format: double
+          nullable: true
+        weekly_movement_direction:
+          type: integer
+          nullable: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+        edited_time:
+          type: string
+          format: date-time
+          readOnly: true
+        categories:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        description_html:
+          type: string
+        resolution_criteria:
+          type: string
+        resolution_criteria_html:
+          type: string
+        fine_print:
+          type: string
+        fine_print_html:
+          type: string
+        prediction_count:
+          type: integer
+          readOnly: true
+        parent_question_id:
+          type: integer
+          writeOnly: true
+        related_questions:
+          type: array
+          items: {}
+          writeOnly: true
+        sub_questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubQuestionUpdate'
+        projects:
+          readOnly: true
+        edit_form_data:
+          type: object
+          additionalProperties: {}
+        projects_input:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionProject'
+          writeOnly: true
+        conditioned_on:
+          type: integer
+          minimum: 1
+        unconditional_question:
+          type: integer
+          minimum: 1
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/Option'
+      required:
+      - active_state
+      - author
+      - author_name
+      - created_time
+      - edited_time
+      - effected_close_time
+      - id
+      - page_url
+      - prediction_count
+      - projects
+      - resolution
+      - url
+      - user_perms
+    QuestionUpdateStatusEnum:
+      enum:
+      - V
+      - T
+      - I
+      type: string
+    QuestionVote:
+      type: object
+      properties:
+        value:
+          $ref: '#/components/schemas/ValueEnum'
+      required:
+      - value
+    Ranking:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        level:
+          type: integer
+          readOnly: true
+        level_title:
+          type: string
+          readOnly: true
+        score:
+          readOnly: true
+      required:
+      - id
+      - level
+      - level_title
+      - score
+      - url
+      - username
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        reminder:
+          $ref: '#/components/schemas/ReminderEnum'
+        question:
+          type: integer
+        user:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ReminderStatusEnum'
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        note:
+          type: string
+        question_title:
+          type: string
+          nullable: true
+          readOnly: true
+        status_label:
+          type: string
+          readOnly: true
+        reminder_label:
+          type: string
+          readOnly: true
+        remind_on_date:
+          type: string
+          format: date-time
+          nullable: true
+        remind_on_new_comments:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        remind_base_prediction:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        remind_on_percent_lifetime:
+          type: integer
+          maximum: 100
+          minimum: 0
+          nullable: true
+        next_trigger_date:
+          type: string
+          format: date-time
+          nullable: true
+        next_trigger_value:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        repeat_pattern:
+          $ref: '#/components/schemas/RepeatPatternEnum'
+      required:
+      - created_time
+      - id
+      - question
+      - question_title
+      - reminder_label
+      - status_label
+      - user
+    ReminderEnum:
+      enum:
+      - REMINDER_ON_DATE
+      - REMINDER_ON_COMMENTS
+      - REMINDER_ON_OPEN
+      - REMINDER_ON_RESOLUTION
+      - REMINDER_ON_CP
+      - REMINDER_AFTER_TIME
+      - REMINDER_ON_LIFETIME
+      type: string
+    ReminderStatusEnum:
+      enum:
+      - REMINDER_STATUS_ACTIVE
+      - REMINDER_STATUS_SENT
+      - REMINDER_STATUS_DEACTIVATED
+      type: string
+    RepeatPatternEnum:
+      enum:
+      - NO_REPEAT
+      - VALUE_REPEAT
+      - DAILY
+      - WEEKLY
+      - MONTHLY
+      - ANNUALLY
+      type: string
+    ScoreTypeEnum:
+      enum:
+      - LEGACY
+      - ABS_LOG
+      type: string
+    ShareQuestion:
+      type: object
+      properties:
+        message:
+          type: string
+        id:
+          type: integer
+        username:
+          type: string
+      required:
+      - id
+      - message
+      - username
+    ShowCommunity:
+      type: object
+      properties:
+        msg:
+          type: string
+      required:
+      - msg
+    Status3baEnum:
+      enum:
+      - A
+      - T
+      - I
+      - R
+      - D
+      - V
+      type: string
+    SubQuestionDetail:
+      type: object
+      properties:
+        active_state:
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        sub_question_label:
+          type: string
+        metaculus_prediction:
+          readOnly: true
+        community_prediction:
+          readOnly: true
+        conditioned_on_resolution:
+          type: number
+          format: double
+        cp_reveal_time:
+          type: string
+          format: date-time
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          default: ''
+          maxLength: 100
+        prediction_count:
+          type: integer
+        created_time:
+          type: string
+          format: date-time
+          readOnly: true
+        scoring:
+          type: object
+          additionalProperties: {}
+          default: {}
+        closing_bonus:
+          type: number
+          format: double
+          readOnly: true
+        user_perms:
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - active_state
+      - closing_bonus
+      - community_prediction
+      - conditioned_on_resolution
+      - created_time
+      - effected_close_time
+      - id
+      - metaculus_prediction
+      - prediction_count
+      - resolution
+      - url
+      - user_perms
+    SubQuestionList:
+      type: object
+      properties:
+        active_state:
+          readOnly: true
+        id:
+          type: integer
+          readOnly: true
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        effected_close_time:
+          type: string
+          format: date-time
+          readOnly: true
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        sub_question_label:
+          type: string
+        metaculus_prediction:
+          readOnly: true
+        community_prediction:
+          readOnly: true
+        conditioned_on_resolution:
+          type: number
+          format: double
+        cp_reveal_time:
+          type: string
+          format: date-time
+      required:
+      - active_state
+      - community_prediction
+      - conditioned_on_resolution
+      - effected_close_time
+      - id
+      - metaculus_prediction
+      - resolution
+    SubQuestionUpdate:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+          maxLength: 200
+        title_short:
+          type: string
+          maxLength: 100
+        publish_time:
+          type: string
+          format: date-time
+        close_time:
+          type: string
+          format: date-time
+        resolve_time:
+          type: string
+          format: date-time
+        possibilities:
+          type: object
+          additionalProperties: {}
+        sub_question_label:
+          type: string
+          maxLength: 45
+        resolution:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        prediction_count:
+          type: integer
+          readOnly: true
+        conditioned_on_resolution:
+          type: number
+          format: double
+          readOnly: true
+        cp_reveal_time:
+          type: string
+          format: date-time
+      required:
+      - conditioned_on_resolution
+      - possibilities
+      - prediction_count
+      - resolution
+      - title_short
+    SubmitTypeEnum:
+      enum:
+      - S
+      - P
+      - U
+      - D
+      - I
+      - R
+      - A
+      - E
+      - B
+      - C
+      - F
+      - Q
+      - Z
+      - M
+      - N
+      type: string
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+        level:
+          type: integer
+          readOnly: true
+        levelTitle:
+          type: string
+          readOnly: true
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+        supporter_level:
+          type: integer
+          readOnly: true
+        supporter_since:
+          type: string
+          format: date-time
+          readOnly: true
+        formerly_known_as:
+          type: string
+          readOnly: true
+      required:
+      - date_joined
+      - formerly_known_as
+      - id
+      - level
+      - levelTitle
+      - supporter_level
+      - supporter_since
+      - url
+      - username
+    UserFeedback:
+      type: object
+      properties:
+        url:
+          type: string
+          maxLength: 1024
+        text_input:
+          type: string
+      required:
+      - text_input
+      - url
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        bio_html:
+          type: string
+          readOnly: true
+        bio_text:
+          type: string
+        website:
+          type: string
+          format: uri
+          maxLength: 100
+      required:
+      - bio_html
+      - id
+      - url
+    ValueEnum:
+      enum:
+      - -1
+      - 0
+      - 1
+      type: integer
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"
